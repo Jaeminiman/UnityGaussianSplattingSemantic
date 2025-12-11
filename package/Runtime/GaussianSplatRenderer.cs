@@ -270,7 +270,7 @@ namespace GaussianSplatting.Runtime
 
         // Semantic data buffers
         GraphicsBuffer m_GpuSemanticLabels;
-        Texture m_GpuSemanticColormap;
+        Texture2D m_GpuSemanticColormap;
         bool m_GpuSemanticValid;
 
         // these buffers are only for splat editing, and are lazily created
