@@ -244,6 +244,14 @@ void CSCalcViewData (uint3 id : SV_DispatchThreadID)
         half4 col;
         col.rgb = ShadeSH(splat.sh, objViewDir, _SHOrder, _SHOnly != 0);
         col.a = min(splat.opacity * opacityScale, 65000);
+
+        // Blend with semantic color if enabled
+        if (_SemanticEnabled)
+        {
+            half3 semColor = LoadSplatSemanticColor(idx);
+            col.rgb = lerp(col.rgb, semColor, _SemanticOpacity);
+        }
+
         view.color.x = (f32tof16(col.r) << 16) | f32tof16(col.g);
         view.color.y = (f32tof16(col.b) << 16) | f32tof16(col.a);
     }

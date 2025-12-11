@@ -127,6 +127,12 @@ namespace GaussianSplatting.Runtime
             m_SHData = dataSh;
         }
 
+        public void SetSemanticData(TextAsset semanticLabels, TextAsset semanticColormap)
+        {
+            m_SemanticData = semanticLabels;
+            m_SemanticColormapData = semanticColormap;
+        }
+
         public static int GetOtherSizeNoSHIndex(VectorFormat scaleFormat)
         {
             return 4 + GetVectorSize(scaleFormat);
@@ -214,6 +220,10 @@ namespace GaussianSplatting.Runtime
         // Chunk data is optional (if data formats are fully lossless then there's no chunking)
         [SerializeField] TextAsset m_ChunkData;
 
+        // Semantic data is optional (for semantic gaussian splatting)
+        [SerializeField] TextAsset m_SemanticData; // per-splat semantic label (1 byte each)
+        [SerializeField] TextAsset m_SemanticColormapData; // colormap (256 * 3 bytes RGB)
+
         [SerializeField] CameraInfo[] m_Cameras;
 
         public VectorFormat posFormat => m_PosFormat;
@@ -226,6 +236,8 @@ namespace GaussianSplatting.Runtime
         public TextAsset otherData => m_OtherData;
         public TextAsset shData => m_SHData;
         public TextAsset chunkData => m_ChunkData;
+        public TextAsset semanticData => m_SemanticData;
+        public TextAsset semanticColormapData => m_SemanticColormapData;
         public CameraInfo[] cameras => m_Cameras;
 
         public struct ChunkInfo

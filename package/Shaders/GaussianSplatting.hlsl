@@ -316,6 +316,25 @@ SplatBufferDataType _SplatSH;
 Texture2D _SplatColor;
 uint _SplatFormat;
 
+// Semantic overlay data
+SplatBufferDataType _SplatSemanticLabels;
+Texture2D _SemanticColormap;
+uint _SemanticEnabled;
+float _SemanticOpacity;
+
+half3 LoadSplatSemanticColor(uint idx)
+{
+    // Load semantic label (1 byte per splat)
+    uint byteAddr = idx;
+    uint wordAddr = byteAddr / 4;
+    uint byteOffset = byteAddr % 4;
+    uint word = _SplatSemanticLabels.Load(wordAddr * 4);
+    uint label = (word >> (byteOffset * 8)) & 0xFF;
+    
+    // Look up color from colormap texture (256x1)
+    return _SemanticColormap.Load(int3(label, 0, 0)).rgb;
+}
+
 // Match GaussianSplatAsset.VectorFormat
 #define VECTOR_FMT_32F 0
 #define VECTOR_FMT_16 1

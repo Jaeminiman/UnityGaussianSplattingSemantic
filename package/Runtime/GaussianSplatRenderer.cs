@@ -243,6 +243,12 @@ namespace GaussianSplatting.Runtime
 
         public GaussianCutout[] m_Cutouts;
 
+        [Header("Semantic Overlay")]
+        [Tooltip("Enable semantic color overlay")]
+        public bool m_SemanticEnabled;
+        [Range(0f, 1f)] [Tooltip("Opacity of semantic color overlay (0 = original color, 1 = semantic color)")]
+        public float m_SemanticOpacity = 0.5f;
+
         public Shader m_ShaderSplats;
         public Shader m_ShaderComposite;
         public Shader m_ShaderDebugPoints;
@@ -261,6 +267,11 @@ namespace GaussianSplatting.Runtime
         internal bool m_GpuChunksValid;
         internal GraphicsBuffer m_GpuView;
         internal GraphicsBuffer m_GpuIndexBuffer;
+
+        // Semantic data buffers
+        GraphicsBuffer m_GpuSemanticLabels;
+        Texture m_GpuSemanticColormap;
+        bool m_GpuSemanticValid;
 
         // these buffers are only for splat editing, and are lazily created
         GraphicsBuffer m_GpuEditCutouts;
@@ -328,6 +339,12 @@ namespace GaussianSplatting.Runtime
             public static readonly int SelectionMode = Shader.PropertyToID("_SelectionMode");
             public static readonly int SplatPosMouseDown = Shader.PropertyToID("_SplatPosMouseDown");
             public static readonly int SplatOtherMouseDown = Shader.PropertyToID("_SplatOtherMouseDown");
+
+            // Semantic properties
+            public static readonly int SplatSemanticLabels = Shader.PropertyToID("_SplatSemanticLabels");
+            public static readonly int SemanticColormap = Shader.PropertyToID("_SemanticColormap");
+            public static readonly int SemanticEnabled = Shader.PropertyToID("_SemanticEnabled");
+            public static readonly int SemanticOpacity = Shader.PropertyToID("_SemanticOpacity");
         }
 
         [field: NonSerialized] public bool editModified { get; private set; }
@@ -418,6 +435,54 @@ namespace GaussianSplatting.Runtime
             });
 
             InitSortBuffers(splatCount);
+
+            // Load semantic data if available
+            CreateSemanticResources();
+        }
+
+        void CreateSemanticResources()
+        {
+            m_GpuSemanticValid = false;
+            if (asset.semanticData == null || asset.semanticData.dataSize == 0)
+                return;
+
+            // Create semantic labels buffer (1 byte per splat, packed into uints)
+            var semanticBytes = asset.semanticData.GetData<byte>();
+            int bufferSize = (semanticBytes.Length + 3) / 4; // pack bytes into uints
+            m_GpuSemanticLabels = new GraphicsBuffer(GraphicsBuffer.Target.Raw, bufferSize, 4) { name = "GaussianSemanticLabels" };
+            m_GpuSemanticLabels.SetData(semanticBytes);
+
+            // Create semantic colormap texture (256x1 RGB)
+            if (asset.semanticColormapData != null && asset.semanticColormapData.dataSize >= 256 * 3)
+            {
+                var colormapBytes = asset.semanticColormapData.GetData<byte>();
+                m_GpuSemanticColormap = new Texture2D(256, 1, UnityEngine.Experimental.Rendering.GraphicsFormat.R8G8B8A8_UNorm, TextureCreationFlags.DontInitializePixels) { name = "SemanticColormap" };
+                // Convert RGB to RGBA
+                var rgbaData = new byte[256 * 4];
+                for (int i = 0; i < 256; i++)
+                {
+                    rgbaData[i * 4 + 0] = colormapBytes[i * 3 + 0];
+                    rgbaData[i * 4 + 1] = colormapBytes[i * 3 + 1];
+                    rgbaData[i * 4 + 2] = colormapBytes[i * 3 + 2];
+                    rgbaData[i * 4 + 3] = 255;
+                }
+                m_GpuSemanticColormap.SetPixelData(rgbaData, 0);
+                m_GpuSemanticColormap.Apply(false, true);
+                m_GpuSemanticValid = true;
+            }
+            else
+            {
+                // Create default colormap with distinct colors
+                m_GpuSemanticColormap = new Texture2D(256, 1, UnityEngine.Experimental.Rendering.GraphicsFormat.R8G8B8A8_UNorm, TextureCreationFlags.None) { name = "SemanticColormap" };
+                for (int i = 0; i < 256; i++)
+                {
+                    // Generate distinct colors using golden ratio
+                    float hue = (i * 0.618033988749895f) % 1.0f;
+                    m_GpuSemanticColormap.SetPixel(i, 0, Color.HSVToRGB(hue, 0.8f, 0.9f));
+                }
+                m_GpuSemanticColormap.Apply(false, true);
+                m_GpuSemanticValid = true;
+            }
         }
 
         void InitSortBuffers(int count)
@@ -507,6 +572,15 @@ namespace GaussianSplatting.Runtime
             UpdateCutoutsBuffer();
             cmb.SetComputeIntParam(cs, Props.SplatCutoutsCount, m_Cutouts?.Length ?? 0);
             cmb.SetComputeBufferParam(cs, kernelIndex, Props.SplatCutouts, m_GpuEditCutouts);
+
+            // Semantic parameters
+            cmb.SetComputeIntParam(cs, Props.SemanticEnabled, m_SemanticEnabled && m_GpuSemanticValid ? 1 : 0);
+            cmb.SetComputeFloatParam(cs, Props.SemanticOpacity, m_SemanticOpacity);
+            if (m_GpuSemanticValid)
+            {
+                cmb.SetComputeBufferParam(cs, kernelIndex, Props.SplatSemanticLabels, m_GpuSemanticLabels);
+                cmb.SetComputeTextureParam(cs, kernelIndex, Props.SemanticColormap, m_GpuSemanticColormap);
+            }
         }
 
         internal void SetAssetDataOnMaterial(MaterialPropertyBlock mat)
@@ -543,6 +617,12 @@ namespace GaussianSplatting.Runtime
             DisposeBuffer(ref m_GpuIndexBuffer);
             DisposeBuffer(ref m_GpuSortDistances);
             DisposeBuffer(ref m_GpuSortKeys);
+
+            // Dispose semantic resources
+            DisposeBuffer(ref m_GpuSemanticLabels);
+            DestroyImmediate(m_GpuSemanticColormap);
+            m_GpuSemanticColormap = null;
+            m_GpuSemanticValid = false;
 
             DisposeBuffer(ref m_GpuEditSelectedMouseDown);
             DisposeBuffer(ref m_GpuEditPosMouseDown);
