@@ -581,6 +581,12 @@ namespace GaussianSplatting.Runtime
                 cmb.SetComputeBufferParam(cs, kernelIndex, Props.SplatSemanticLabels, m_GpuSemanticLabels);
                 cmb.SetComputeTextureParam(cs, kernelIndex, Props.SemanticColormap, m_GpuSemanticColormap);
             }
+            
+            else
+            {
+                // [추가된 부분] 데이터가 없어도 에러가 나지 않도록 '검은색 텍스처'를 임시로 연결합니다.
+                cmb.SetComputeTextureParam(cs, kernelIndex, Props.SemanticColormap, Texture2D.blackTexture);
+            }
         }
 
         internal void SetAssetDataOnMaterial(MaterialPropertyBlock mat)
